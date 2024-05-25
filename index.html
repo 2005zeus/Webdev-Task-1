@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task 1</title>
+
+    <link rel="stylesheet" type="text/css" href="css/stylesheet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    
+    <div id = 'container' class="container">
+        <div class="column column-left"></div>
+
+        <div class="column column-middle">
+            <!-- Middle column (main) -->
+            <div class="topbar">
+                <div class="topbar-controls">
+                    <button id="pauseResumeBtn" class="icon" title="Pause"><i class="fas fa-pause"></i></button>
+                    <!-- <button id="resetBtn" class="icon" title="Reset" disabled><i class="fas fa-sync-alt"></i></button> -->
+                </div>
+                <div class="topbar-timer">
+                    <button id="blueButton" class="blue-timer">00:00</button>
+                    <button id="redButton" class="red-timer" disabled>00:00</button>
+                </div>
+            </div>
+
+            <div class="board-container">
+                <!-- Board container -->
+                <div class="board" id="board">
+                    <div id="overlay" class="overlay">
+                        <div class="overlay-content">
+                            <p id="overlay-text">Game paused</p>
+                            <button id="pauseResumeOverlay" class="icon" title="Resume"><i class="fas fa-play"></i></button>
+                            <button id="resetBtn" class="icon" title="Reset"><i class="fas fa-sync-alt"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bottombar">
+                <button disabled id="bottombar-l" class="icon"><i class="fas fa-redo"></i></button>
+                <button disabled id="bottombar-r" class="icon"><i class="fas fa-undo"></i></button>
+            </div>
+        </div>
+
+        <div class="column column-right"></div>
+    </div>
+
+    <script src="js/behavior.js"></script>
+</body>
+</html>

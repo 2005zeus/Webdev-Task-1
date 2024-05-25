@@ -1,0 +1,266 @@
+* {
+    margin: 0;
+    font-family: "Lato", sans-serif;
+}
+
+/*-------------------------------------------------------*/
+.container {
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 90vh 1fr;
+}
+
+.column {
+    flex: 1;
+}
+
+.column-left {
+    background-color: cornflowerblue;
+}
+
+.column-middle {
+    background-color: cadetblue;
+    /* width: 90vh;  */
+}
+
+.column-right {
+    background-color: cornflowerblue;
+}
+
+/*-------------------------------------------------------*/
+/* Column Middle */
+
+.topbar {
+    background-color: antiquewhite;
+    height: 10vh;
+}
+
+.topbar-controls{
+    background-color: coral;
+    height: 50%;
+
+    display: flex;
+    justify-content: center;
+}
+
+.topbar-controls > button{
+    border: none;
+    background: none;
+
+    height: 100%;
+    font-size: large;
+}
+
+
+.topbar-timer{
+    background-color: white;
+    height: 50%;
+
+    text-align: center;
+    font-weight: lighter;
+}
+
+.topbar-timer > button{
+    border: none;
+    /* background: none; */
+
+    height: 100%;
+    /* width: 10%; */
+
+    font-size: 2.5vh;
+}
+
+.blue-timer{
+    color: blue;
+}
+
+.red-timer{
+    color: red;
+}
+
+.board-container {
+    height: auto;
+}
+
+.bottombar {
+    background-color: darkorange;
+    height: 4vh;
+
+    display: flex;
+    justify-content: center;
+}
+
+.bottombar > button {
+    background: none;
+    border: none;
+    padding-top: 0;
+    padding-bottom: 0;
+    height: 100%;
+    width: 15%;
+
+    font-size: large;
+
+    align-self: center;
+}
+
+
+/*-------------------------------------------------------*/
+/* Column middle > Board */
+
+.board {
+    background-color: white;
+    height: 83vh;
+
+    margin: 1vh 2.5vh 0 2.5vh;
+    border-radius: 2vh;
+    border: 1vh solid black;
+
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+
+    position: relative; /**/
+}
+
+@media screen and (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr;
+    }
+    .column-middle {
+        height: auto;
+    }
+    .board {
+        padding-top: 0;
+        height: 90vw; 
+    }
+}
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: none; 
+    z-index: 1; 
+}
+
+.overlay-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+}
+
+.overlay-content > p {
+    font-size: xx-large;
+    padding-bottom: 10%;
+}
+
+.overlay-content > button {
+    border: none;
+    background: none;
+
+    color: white;
+    font-size: xx-large;
+}
+
+.cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 1px solid black;
+    padding: 0;
+
+    background: none;
+}
+
+.cell-legal{
+    background: green !important;
+}
+
+
+.piece {
+    width: 100%;
+    height: 100%;
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+}
+
+.bullet {
+    position: fixed;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+}
+
+.r{
+    background-color: red;
+}
+
+.b{
+    background-color: blue;
+}
+
+/* red */
+
+.r-titan {
+    background-image: url(img/pieces/r/r-titan.png);
+    background-size: 100%;
+}
+
+.r-tank{
+    background-image: url(img/pieces/r/r-tank.png);
+    background-size: 100%;
+}
+
+.r-rico{
+    background-image: url(img/pieces/r/r-rico.png);
+    background-size: 100%;
+}
+
+.r-semirico{
+    background-image: url(img/pieces/r/r-semirico.png);
+    background-size: 100%;
+}
+
+.r-cannon{
+    background-image: url(img/pieces/r/r-cannon.png);
+    background-size: 100%;
+}
+
+/* Blue */
+
+.b-titan{
+    background-image: url(img/pieces/b/b-titan.png);
+    background-size: 100%;
+}
+
+.b-tank{
+    background-image: url(img/pieces/b/b-tank.png);
+    background-size: 100%;
+}
+
+.b-rico{
+    background-image: url(img/pieces/b/b-rico.png);
+    background-size: 100%;
+}
+
+.b-semirico{
+    background-image: url(img/pieces/b/b-semirico.png);
+    background-size: 100%;
+}
+
+.b-cannon{
+    background-image: url(img/pieces/b/b-cannon.png);
+    background-size: 100%;
+}
+
+/*-------------------------------------------------------*/
+
