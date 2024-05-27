@@ -350,9 +350,9 @@ class Piece{
                             } else {
                                 // 1 or 3
                                 if (
-                                    srico == 1 && (updateVector[0] > 0 || updateVector[1] < 0)
+                                    srico == 1 && (updateVector[0] > 0 || updateVector[1] > 0)
                                     ||
-                                    srico == 3 && (updateVector[0] < 0 || updateVector[1] > 0)
+                                    srico == 3 && (updateVector[0] < 0 || updateVector[1] < 0)
                                 ){
                                     if (updateVector[0]){
                                         updateVector[1] = -updateVector[0];
