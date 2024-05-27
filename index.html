@@ -30,7 +30,7 @@
                 <!-- Board container -->
                 <div class="board" id="board">
                     <div id="overlay" class="overlay">
-                        <div class="overlay-content">
+                        <div id="overlay-content" class="overlay-content">
                             <p id="overlay-text">Game paused</p>
                             <button id="pauseResumeOverlay" class="icon" title="Resume"><i class="fas fa-play"></i></button>
                             <button id="resetBtn" class="icon" title="Reset"><i class="fas fa-sync-alt"></i></button>
@@ -45,7 +45,13 @@
             </div>
         </div>
 
-        <div class="column column-right"></div>
+        <div class="column column-right">
+            <!-- Right column (History) -->
+            <div id="history" class="history-container">
+                <div id="history-b" class="history-b"></div>
+                <div id="history-r" class="history-r"></div>
+            </div>
+        </div>
     </div>
 
     <script src="js/behavior.js"></script>

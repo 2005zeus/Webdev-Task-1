@@ -1,4 +1,4 @@
-let pieceTable = {
+const pieceTable = {
     'rt': 'r-titan',
     'rb': 'r-tank',
     'rr': 'r-rico',
@@ -15,23 +15,37 @@ let initialPosition = [
     // <piece><orientation>
     // rico: 0,1 ; semirico: 0,1,2,3 ; cannon: 0,1,2,3
     ['', '', 'rc2', 'rt', '', '', '', ''],
-    ['', '', '', '', '', 'rr', '', ''],
+    ['', '', '', '', '', 'br', '', ''],
+    ['', '', 'bb', '', '', '', '', ''],
     ['', '', '', '', '', '', '', ''],
     ['', '', '', '', '', '', '', ''],
-    ['', '', 'bs2', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', ''],
     ['', 'bb', '', '', '', '', '', ''],
-    ['', '', '', '', '', '', '', ''],
-    ['bs3', 'br1', '', '', 'bt', 'bc', '', ''],
+    ['', 'br1', '', '', 'bt', 'bc', '', ''],
 ]
 
-let canRotate = {
+const canRotate = {
     'r': true,
-    's': true
+    's': true,
+    'b': true,
+}
+
+let AudioDict = {
+    shoot: new Audio('./css/sounds/shoot.mp3'),
+    destroy: new Audio('./css/sounds/destroy.mp3'),
+    click: new Audio('./css/sounds/click.mp3'),
+    bounce: new Audio('./css/sounds/bounce.mp3'),
+    move: new Audio('./css/sounds/move.mp3'),
+    rotate: new Audio('./css/sounds/rotate.mp3'),
+    win: new Audio('./css/sounds/win.mp3'),
+    clock1: new Audio('./css/sounds/2x-clock-tick.mp3'),
+    clock2: new Audio('./css/sounds/back-tick.mp3'),        // Not used
 }
 
 let paused = false;
-const blueInitTime = 30;
-const redInitTime = 30;
+let HistoryList = [];
+const blueInitTime = 300;
+const redInitTime = 300;
 let blueTime = blueInitTime; 
 let redTime = redInitTime;
 
@@ -69,6 +83,8 @@ class Cell{
     getLegal(){
         if (!this.piece) return false;
 
+        AudioDict.click.play();
+
         let legalMoves = [];
         let totalMoves = [];
 
@@ -91,14 +107,27 @@ class Cell{
             }
         }
 
-        //Check what moves are possible from total moves
+        // Check what moves are possible from total moves
         for (let cellId in totalMoves){
             if (Cells[totalMoves[cellId]]){ // To eliminate outside Cells
-                if (!Cells[totalMoves[cellId]].piece){
+                if (
+                    !Cells[totalMoves[cellId]].piece                                            // No piece
+                    ||
+                    (
+                        this.piece.type == 'r'                                                  // Piece (not t or c)
+                        && Cells[totalMoves[cellId]].piece.type != 't' 
+                        && Cells[totalMoves[cellId]].piece.type != 'c'
+                    )
+                    ||
+                    (
+                        this.piece.type == 'r'                                                  // Piece (c and in same x position)
+                        && Cells[totalMoves[cellId]].piece.type == 'c'
+                        && this.position[0] == Cells[totalMoves[cellId]].piece.position[0]
+                    )
+                ){
                     legalMoves.push(totalMoves[cellId])
                 }
             }
-            
         }
 
         return legalMoves;
@@ -127,6 +156,8 @@ class Piece{
     shoot(){
         if(this.type != 'c' || this.team != Turn) return false;
 
+        setTimeout(() => AudioDict.shoot.play(), 250);
+
         function getAbsolutePosition(element) {
             // Returns the midpoint of the element
             const rect = element.getBoundingClientRect();
@@ -149,11 +180,14 @@ class Piece{
 
         const cannon = document.getElementById(currentVector[0] + '-' + currentVector[1]);
 
+        //--
+        // Creating th bullet and its design
         let bullet = document.createElement('div');
         bullet.className = 'bullet ' + Turn;
         bullet.style.left = getAbsolutePosition(cannon)[0] - 10 + 'px';
         bullet.style.top = getAbsolutePosition(cannon)[1] - 10 + 'px';
         document.getElementById('container').appendChild(bullet);
+        //--
 
         const cellDist = getAbsolutePosition(document.getElementById('0-1'))[0] - getAbsolutePosition(document.getElementById('0-0'))[0];
 
@@ -189,6 +223,17 @@ class Piece{
                 L.recur--;
                 T.recur--;
 
+                // Bullet rotation
+                if (updateVector[1] == 1){
+                    bullet.style.transform = `rotate(90deg)`;
+                } else if (updateVector[1] == -1){
+                    bullet.style.transform = `rotate(-90deg)`;
+                } else if (updateVector[0] == 1){
+                    bullet.style.transform = `rotate(180deg)`;
+                } else if (updateVector[0] == -1){
+                    bullet.style.transform = `rotate(0deg)`;
+                }
+
                 if (L.recur <= 0 && T.recur <= 0) {
                     if (deflectors){
                         bullet.style.left = getAbsolutePosition(currentCelle)[0] + (cellDist * updateVector[1]) - 10 + 'px';
@@ -218,13 +263,27 @@ class Piece{
                             // Titan - game over if opponent or else pass through
                             if (currentCell.piece.team == Turn){
                                 playerWin(Turn == 'b' ? 'Blue' : 'Red');
+                                bullet.remove();
                             } else {
                                 passThrough();
                             }
 
                         } else if (currentCell.piece.type == 'b'){
-                            // Tank - delete the bullet
-                            bullet.remove();
+                            // Tank - delete the bullet or passthrough from one side
+                            let tank = currentCell.piece;
+                            if (
+                                (tank.orientation%2 == 0 && updateVector[1])
+                                ||
+                                (tank.orientation%2 == 1 && updateVector[0])
+                            ){
+                                // Horizontal or vertical pass through
+                                passThrough();
+
+                            } else {
+                                // Delete the bullet
+                                bullet.remove();
+                            }
+
                         } else if (currentCell.piece.type == 'r'){
                             // Rico - deflect
                             let rico = currentCell.piece.orientation
@@ -249,6 +308,7 @@ class Piece{
                                 }
                             }
 
+                            AudioDict.bounce.play();
                             passThrough();
 
                         } else if (currentCell.piece.type == 's'){
@@ -275,9 +335,15 @@ class Piece{
                                         updateVector[1] = 0;
                                     }
 
+                                    AudioDict.bounce.play();
                                     passThrough();
 
                                 } else {
+                                    document.getElementById(currentCell.piece.id).remove();
+                                    Pieces[currentCell.piece.id] = null;
+                                    currentCell.piece = null;
+
+                                    AudioDict.destroy.play();
                                     bullet.remove();
                                 }
 
@@ -296,9 +362,15 @@ class Piece{
                                         updateVector[1] = 0;
                                     }
                                     
+                                    AudioDict.bounce.play();
                                     passThrough();
 
                                 } else {
+                                    document.getElementById(currentCell.piece.id).remove();
+                                    Pieces[currentCell.piece.id] = null;
+                                    currentCell.piece = null;
+
+                                    AudioDict.destroy.play();
                                     bullet.remove();
                                 }
                             }
@@ -340,11 +412,24 @@ class Piece{
 }
 
 //--------------------------------------------------------------------------------
-// Left/Right button click event handlers
+// Left/Right rotation button click event handlers
 
 lButton.addEventListener('click', () => {
     // Left
     if (selectedCell && selectedCell.piece){
+
+        // History
+        let historyEntry = {
+            team: selectedCell.piece.team,
+            type: selectedCell.piece.type,
+            orientation: {
+                old: selectedCell.piece.orientation,
+                new: (selectedCell.piece.orientation + 1) % 4
+            },
+        }
+        updateHistory(historyEntry);
+
+        // Board changes
         selectedCell.piece.orientation = (selectedCell.piece.orientation + 1) % 4;
         document.getElementById(selectedCell.piece.id).style.transform = `rotate(${selectedCell.piece.orientation * 90}deg)`;
         
@@ -352,6 +437,8 @@ lButton.addEventListener('click', () => {
             // Removes prev green squares
             document.getElementById(prevLegalMoves[cellId]).className = 'cell';
         }
+
+        AudioDict.rotate.play();
         prevLegalMoves = []
         switchTurns()
     }
@@ -360,6 +447,19 @@ lButton.addEventListener('click', () => {
 rButton.addEventListener('click', () => {
     // Right
     if (selectedCell && selectedCell.piece){
+        
+        // History
+        let historyEntry = {
+            team: selectedCell.piece.team,
+            type: selectedCell.piece.type,
+            orientation: {
+                old: selectedCell.piece.orientation,
+                new: (selectedCell.piece.orientation + 3) % 4
+            },
+        }
+        updateHistory(historyEntry);
+
+        // Board changes
         selectedCell.piece.orientation = (selectedCell.piece.orientation + 3) % 4;
         document.getElementById(selectedCell.piece.id).style.transform = `rotate(${selectedCell.piece.orientation * 90}deg)`;
     
@@ -367,6 +467,8 @@ rButton.addEventListener('click', () => {
             // Removes prev green squares
             document.getElementById(prevLegalMoves[cellId]).className = 'cell';
         }
+
+        AudioDict.rotate.play();
         prevLegalMoves = []
         switchTurns()
     }
@@ -389,6 +491,7 @@ function startBlueTimer() {
     blueInterval = setInterval(() => {
         if (!paused){
             blueTime--;
+            AudioDict.clock1.play();
             updateButtonDisplay(blueButton, blueTime);
 
             if (blueTime <= 0) {
@@ -407,6 +510,7 @@ function startRedTimer() {
     redInterval = setInterval(() => {
         if (!paused){
             redTime--;
+            AudioDict.clock1.play();
             updateButtonDisplay(redButton, redTime);
 
             if (redTime <= 0) {
@@ -423,6 +527,54 @@ function updateButtonDisplay(buttonElement, time) {
     buttonElement.textContent = `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 }
 
+function updateHistory(entry){
+    HistoryList.push(entry);
+
+    // Update history on screen
+    let entryText
+
+    if (entry.position){
+        // Position change
+        entryText = 
+            pieceTable[entry.team + entry.type].slice(2).charAt(0).toUpperCase() 
+            + pieceTable[entry.team + entry.type].slice(2).slice(1)
+            + '<br>'
+            + '(' + String(entry.position.old[1] + 1) + ', ' + String(entry.position.old[0] + 1) + ')'
+            + ' &rarr; '
+            + '(' + String(entry.position.new[1] + 1) + ', ' + String(entry.position.new[0] + 1) + ')';
+    
+    } else {
+        // Orientation change
+        function getOrien(orien){
+            switch (orien){
+                case 0:
+                    return 'North';
+                case 1:
+                    return 'East';
+                case 2:
+                    return 'South';
+                case 3:
+                    return 'West';
+            }
+        }
+
+        entryText = 
+            pieceTable[entry.team + entry.type].slice(2).charAt(0).toUpperCase() 
+            + pieceTable[entry.team + entry.type].slice(2).slice(1)
+            + '<br>'
+            + getOrien(entry.orientation.old)
+            +' &rarr; '
+            + getOrien(entry.orientation.new);
+            
+    }
+
+    const history = document.getElementById(`history-${entry.team}`);
+    const historyEntry = document.createElement('div');
+    historyEntry.className = 'history-entry';
+    historyEntry.innerHTML = entryText;
+    history.appendChild(historyEntry);
+}
+
 function playerWin(p){
     // When a player wins
     paused = true;
@@ -433,8 +585,11 @@ function playerWin(p){
 
     overlay.style.display = 'block';
     overlayText.innerHTML = `${p} has won!`;
+    AudioDict.win.play();
 
     pauseResumeOverlay.remove();
+
+    localStorage.setItem('History', HistoryList);
 }
 
 //--------------------------------------------------------------------------------
@@ -460,6 +615,8 @@ function controls(){
             pauseResumeBtn.innerHTML = '<i class="fas fa-pause"></i>';
             overlay.style.display = 'none';
         }
+
+        AudioDict.click.play();
     });
 
     pauseResumeOverlay.addEventListener('click', () => {
@@ -467,10 +624,13 @@ function controls(){
         overlay.style.display = 'none';
 
         pauseResumeBtn.innerHTML = '<i class="fas fa-pause"></i>';
+
+        AudioDict.click.play();
     });
 
     resetBtn.addEventListener('click', () => {
         resetBoard();
+        AudioDict.click.play();
     });
 }
 
@@ -506,15 +666,54 @@ function generateGrid() {
 
                 if (prevLegalMoves.includes(cell.id)){
                     // Perform a move since the legal cell is clicked
-                    selectedCell.piece.position = [i, j];
-                    cell.piece = selectedCell.piece;
 
-                    document.getElementById(cell.piece.id).remove();
-                    let elem = cell.piece.element();
-                    document.getElementById(`${i}-${j}`).appendChild(elem);
-                    
-                    selectedCell.piece = null;
+                    // Entering history
+                    let historyEntry = {
+                        team: selectedCell.piece.team,
+                        type: selectedCell.piece.type,
+                        position: {
+                            old: selectedCell.piece.position,
+                            new: [i, j]
+                        },
+                    }
+                    updateHistory(historyEntry);
 
+                    if (selectedCell.piece.type == 'r' && cell.piece){
+                        // Rico trying to switch with a piece
+                        let selectedPiece = selectedCell.piece;
+
+                        let temp = Array.from(selectedCell.piece.position)
+                        selectedCell.piece.position = [i, j];
+                        cell.piece.position = temp;
+
+                        //---
+                        // Movement process on board
+                        document.getElementById(cell.piece.id).remove();
+                        document.getElementById(selectedCell.piece.id).remove();
+                        let elemC = cell.piece.element();
+                        let elemS = selectedPiece.element();
+                        document.getElementById(`${cell.piece.position[0]}-${cell.piece.position[1]}`).appendChild(elemC);
+                        document.getElementById(`${selectedPiece.position[0]}-${selectedPiece.position[1]}`).appendChild(elemS);
+                        //--- 
+
+                        temp = selectedCell.piece
+                        selectedCell.piece = cell.piece;
+                        cell.piece = temp;
+
+                    } else {
+                        // Performing move
+                        selectedCell.piece.position = [i, j];
+                        cell.piece = selectedCell.piece;
+    
+                        // Movement process on board (might later add animation)
+                        document.getElementById(cell.piece.id).remove();
+                        let elem = cell.piece.element();
+                        document.getElementById(`${i}-${j}`).appendChild(elem);
+                        
+                        selectedCell.piece = null;
+                    }
+
+                    AudioDict.move.play();
                     switchTurns();
 
                     // Removes prev green squares
@@ -611,6 +810,17 @@ function resetBoard(){
     pauseResumeBtn.innerHTML = '<i class="fas fa-pause"></i>';
     overlay.style.display = 'none';
 
+    // Create resume button in ovelay
+    if (!document.getElementById('pauseResumeOverlay')){
+        const resumeBtn = document.createElement('button');
+        resumeBtn.id ='pauseResumeOverlay';
+        resumeBtn.className = 'icon';
+        resumeBtn.title = 'Resume';
+        resumeBtn.innerHTML = '<i class="fas fa-play"></i>';
+        document.getElementById('overlay-content').insertBefore(resumeBtn, document.getElementById('resetBtn'));
+    }
+    document.getElementById('overlay-text').innerHTML = 'Game paused';
+
     // Reset the timer
     blueTime = blueInitTime;
     redTime = redInitTime;
@@ -618,6 +828,18 @@ function resetBoard(){
     updateButtonDisplay(redButton, redTime);
     clearInterval(blueInterval);
     clearInterval(redInterval);
+
+    // Clear history
+    HistoryList = [];
+    const history_b = document.getElementById('history-b');
+    while (history_b.firstChild){
+        history_b.removeChild(history_b.firstChild);
+    }
+    const history_r = document.getElementById('history-r');
+    while (history_r.firstChild){
+        history_r.removeChild(history_r.firstChild);
+    }
+    
 }
 
 //----------------------------------------------------------------
