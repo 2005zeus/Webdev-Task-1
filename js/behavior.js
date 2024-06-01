@@ -30,7 +30,7 @@ const canRotate = {
     'b': true,
 }
 
-let AudioDict = {
+const AudioDict = {
     shoot: new Audio('./css/sounds/shoot.mp3'),
     destroy: new Audio('./css/sounds/destroy.mp3'),
     click: new Audio('./css/sounds/click.mp3'),
@@ -44,10 +44,13 @@ let AudioDict = {
 
 let paused = false;
 let HistoryList = [];
+let tempHistoryList = [];
 const blueInitTime = 300;
 const redInitTime = 300;
 let blueTime = blueInitTime; 
 let redTime = redInitTime;
+
+let BotMode = false;
 
 let Cells = {};
 let Pieces = {};
@@ -56,9 +59,6 @@ let prevLegalMoves = [];
 let selectedCell = null;
 
 let Turn = 'b';
-
-let lButton = document.getElementById('bottombar-l');
-let rButton = document.getElementById('bottombar-r');
 
 //---------------------------------------------------------------------------------
 // Classes
@@ -258,11 +258,20 @@ class Piece{
                 if (currentCell){
                     // Bullet inside the board
                     if (currentCell.piece){
+                        // Check for spells
+
+                        if(currentCell.piece.passThrough){
+                            // Pass through
+                            passedThrough(currentCell.piece);
+                            passThrough();
+                            return;
+                        }
+
                         // Check which piece has been hit
                         if (currentCell.piece.type == 't'){
                             // Titan - game over if opponent or else pass through
                             if (currentCell.piece.team == Turn){
-                                playerWin(Turn == 'b' ? 'Blue' : 'Red');
+                                playerWin();
                                 bullet.remove();
                             } else {
                                 passThrough();
@@ -340,7 +349,7 @@ class Piece{
 
                                 } else {
                                     document.getElementById(currentCell.piece.id).remove();
-                                    Pieces[currentCell.piece.id] = null;
+                                    delete Pieces[currentCell.piece.id];
                                     currentCell.piece = null;
 
                                     AudioDict.destroy.play();
@@ -367,7 +376,7 @@ class Piece{
 
                                 } else {
                                     document.getElementById(currentCell.piece.id).remove();
-                                    Pieces[currentCell.piece.id] = null;
+                                    delete Pieces[currentCell.piece.id];
                                     currentCell.piece = null;
 
                                     AudioDict.destroy.play();
@@ -412,70 +421,223 @@ class Piece{
 }
 
 //--------------------------------------------------------------------------------
-// Left/Right rotation button click event handlers
+// Click events handler
 
-lButton.addEventListener('click', () => {
-    // Left
-    if (selectedCell && selectedCell.piece){
+function controls(){
+    // Bottombar
+    const lButton = document.getElementById('bottombar-l');
+    const rButton = document.getElementById('bottombar-r');
 
-        // History
-        let historyEntry = {
-            team: selectedCell.piece.team,
-            type: selectedCell.piece.type,
-            orientation: {
-                old: selectedCell.piece.orientation,
-                new: (selectedCell.piece.orientation + 1) % 4
-            },
+    lButton.addEventListener('click', () => {
+        // Left
+        performRotation('l')
+    });
+
+    rButton.addEventListener('click', () => {
+        // Right
+        performRotation('r')
+    });
+
+    //-------------------------------------------------------------------------------
+    // Topbar
+    const pauseResumeBtn = document.getElementById('pauseResumeBtn');
+    const undoButton = document.getElementById('undo');
+    const redoButton = document.getElementById('redo');
+
+    pauseResumeBtn.addEventListener('click', () => {
+        if (!paused) {
+            paused = true;
+            pauseResumeBtn.innerHTML = '<i class="fas fa-play"></i>';
+            overlay.style.display = 'block';
+        } else {
+            paused = false;
+            pauseResumeBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            overlay.style.display = 'none';
         }
-        updateHistory(historyEntry);
 
-        // Board changes
-        selectedCell.piece.orientation = (selectedCell.piece.orientation + 1) % 4;
-        document.getElementById(selectedCell.piece.id).style.transform = `rotate(${selectedCell.piece.orientation * 90}deg)`;
+        AudioDict.click.play();
+    });
+
+    undoButton.addEventListener('click', () => {
+        // Undo
+        let lastEntry = HistoryList.pop();
+
+        // Board
+        if (lastEntry.position) {
+            // Movement
+            selectedCell = Cells[lastEntry.current];
+            performMove(
+                lastEntry.selected,
+                lastEntry.position.old
+            );
+        } else {
+            // Rotation
+            selectedCell = Cells[lastEntry.selected];
+            
+            performRotation(
+                lastEntry.direction == 'r' ? 'l' : 'r',
+                true
+            );
+        }
+
+        // History display
+        document.getElementById(lastEntry.entryId).remove();
+
+        switchTurns(true);
+        redoButton.disabled = false;
+
+        // Disabling when no more undo available
+        if (HistoryList.length <= 0) {
+            undoButton.disabled = true;
+            return;
+        }
+    })
+
+    redoButton.addEventListener('click', () => {
+        // Redo
+        let focusedEntry = tempHistoryList[HistoryList.length];
+
+        selectedCell = Cells[focusedEntry.selected];
+
+        if (focusedEntry.position){
+            // Movement
+            performMove(
+                focusedEntry.current,
+                focusedEntry.position.new
+            )
+        } else {
+            // Rotation
+            performRotation(focusedEntry.direction, true);
+        }
+
+        updateHistory(focusedEntry, false, true);
+        switchTurns();
+    })
+
+    //---------------------------------------------------------------------------------
+    // Overlay
+    const pauseResumeOverlay = document.getElementById('pauseResumeOverlay');
+    const resetBtn = document.getElementById('resetBtn');
+    const replayBtn = document.getElementById('replayBtn');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+    const overlay = document.getElementById('overlay');
+
+    pauseResumeOverlay.addEventListener('click', () => {
+        paused = false;
+        overlay.style.display = 'none';
+
+        pauseResumeBtn.innerHTML = '<i class="fas fa-pause"></i>';
+
+        AudioDict.click.play();
+    });
+
+    resetBtn.addEventListener('click', () => {
+        resetBoard();
+        AudioDict.click.play();
+    });
+
+    replayBtn.addEventListener('click', () => {
+        // Replays from local storage
+        let retrievedHistory = JSON.parse(localStorage.getItem('History'));
+        initialPosition = JSON.parse(localStorage.getItem('InitialPosition'));
+        BotMode = Boolean(localStorage.getItem('BotMode'));
+        AudioDict.click.play();
+
+        if (!retrievedHistory) {
+            alert('Replay unavailable');
+            return;
+        }
+
+        // Reset board
+        resetBoard();
+
+        let count = retrievedHistory.length;
+        function replayMain(){
+            // Recurring function
+            let entry = retrievedHistory.length - count;
+
+            // Move
+            if(retrievedHistory[entry].position){
+                // Movement
+                // let historyEntry = {
+                //     team: selectedCell.piece.team,
+                //     type: selectedCell.piece.type,
+                //     selected: selectedCell.id,
+                //     current: cell.id,
+                //     position: {
+                //         old: selectedCell.piece.position,
+                //         new: [i, j]
+                //     },
+                // }
+                selectedCell = Cells[retrievedHistory[entry].selected];
         
-        for (let cellId in prevLegalMoves){
-            // Removes prev green squares
-            document.getElementById(prevLegalMoves[cellId]).className = 'cell';
+                let cellPosition = retrievedHistory[entry].position.new;
+                performMove(
+                    retrievedHistory[entry].current,
+                    cellPosition
+                );
+                
+                updateHistory(retrievedHistory[entry])
+            } else {
+                // Rotation
+                selectedCell = Cells[retrievedHistory[entry].selected];
+
+                performRotation(retrievedHistory[entry].direction, true);
+                updateHistory(retrievedHistory[entry]);
+            }
+
+            // Shoot
+            Turn = retrievedHistory[entry].team;
+            shootCannon();
+
+            // Handler
+            count--;
+            if (count > 0) {
+                setTimeout(replayMain, 1000);
+            } else {
+                setTimeout(() => { playerWin(true) }, 1000);
+            }
         }
 
-        AudioDict.rotate.play();
-        prevLegalMoves = []
-        switchTurns()
+        replayMain();
+    });
+
+    shuffleBtn.addEventListener('click', () => {
+        // Shuffles board
+        initialPosition = randomizeInitPosition();
+        resetBoard();
+    });
+
+}
+//----------------------------------------------------------------
+// Spells
+
+const bPass = document.getElementById('spell-b-1');
+const rPass = document.getElementById('spell-r-1');
+
+function passThroughSpell(){
+    if (selectedCell){
+        let selectedPiece = selectedCell.piece;
+        document.getElementById(selectedPiece.id).classList.add('passThroughPiece');
+
+        selectedPiece.passThrough = true;
     }
-});
+}
 
-rButton.addEventListener('click', () => {
-    // Right
-    if (selectedCell && selectedCell.piece){
-        
-        // History
-        let historyEntry = {
-            team: selectedCell.piece.team,
-            type: selectedCell.piece.type,
-            orientation: {
-                old: selectedCell.piece.orientation,
-                new: (selectedCell.piece.orientation + 3) % 4
-            },
-        }
-        updateHistory(historyEntry);
+bPass.addEventListener('click', ()=>{passThroughSpell()});
 
-        // Board changes
-        selectedCell.piece.orientation = (selectedCell.piece.orientation + 3) % 4;
-        document.getElementById(selectedCell.piece.id).style.transform = `rotate(${selectedCell.piece.orientation * 90}deg)`;
-    
-        for (let cellId in prevLegalMoves){
-            // Removes prev green squares
-            document.getElementById(prevLegalMoves[cellId]).className = 'cell';
-        }
+rPass.addEventListener('click', ()=>{passThroughSpell()});
 
-        AudioDict.rotate.play();
-        prevLegalMoves = []
-        switchTurns()
-    }
-});
+//---
+function passedThrough(piece){
+    const piecer = document.getElementById(piece.id);
+
+    piecer.classList.remove('passThroughPiece');
+    piecer.passThrough = null;
+}
 
 //--------------------------------------------------------------------------------
-// Timer
+// Stats
 
 // Timer code
 const blueButton = document.getElementById('blueButton');
@@ -495,7 +657,8 @@ function startBlueTimer() {
             updateButtonDisplay(blueButton, blueTime);
 
             if (blueTime <= 0) {
-                playerWin('Red');
+                Turn = 'r';
+                playerWin();
                 clearInterval(blueInterval);
             }
         }
@@ -514,7 +677,8 @@ function startRedTimer() {
             updateButtonDisplay(redButton, redTime);
 
             if (redTime <= 0) {
-                playerWin('Blue');
+                Turn = 'b';
+                playerWin();
                 clearInterval(redInterval);
             }
         }
@@ -527,8 +691,20 @@ function updateButtonDisplay(buttonElement, time) {
     buttonElement.textContent = `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 }
 
-function updateHistory(entry){
-    HistoryList.push(entry);
+function updateHistory(entry, replay = false, redo = false) {
+    if (!replay) {
+        entry['entryId'] = HistoryList.length;
+
+        HistoryList.push(entry);
+        if (!redo) {
+            tempHistoryList = Array.from(HistoryList);
+        }
+
+        if (tempHistoryList.length > 0) {
+            document.getElementById('undo').disabled = false;
+        }
+    }
+    
 
     // Update history on screen
     let entryText
@@ -570,29 +746,40 @@ function updateHistory(entry){
 
     const history = document.getElementById(`history-${entry.team}`);
     const historyEntry = document.createElement('div');
+    historyEntry.id = entry.entryId;
     historyEntry.className = 'history-entry';
     historyEntry.innerHTML = entryText;
     history.appendChild(historyEntry);
 }
 
-function playerWin(p){
+function playerWin(replay = false) {
     // When a player wins
+    let p;
+    if (BotMode){
+        p = Turn == 'b' ? "Player" : "Bot";
+    } else {
+        p = Turn == 'b' ? "Blue" : "Red";
+    }
     paused = true;
 
-    const overlay = document.getElementById('overlay');
     const overlayText = document.getElementById('overlay-text');
-    const pauseResumeOverlay = document.getElementById('pauseResumeOverlay');
 
     overlay.style.display = 'block';
     overlayText.innerHTML = `${p} has won!`;
     AudioDict.win.play();
 
-    pauseResumeOverlay.remove();
+    pauseResumeOverlay.innerHTML = '';
 
-    localStorage.setItem('History', HistoryList);
+    if (!replay){
+        // Store history and initialPosition
+        localStorage.setItem('History', JSON.stringify(HistoryList));
+        localStorage.setItem('InitialPosition', JSON.stringify(initialPosition));
+        localStorage.setItem('BotMode', BotMode.toString());
+    }
 }
 
 //--------------------------------------------------------------------------------
+// Piece functions
 
 function shootCannon() {
     for (i in Pieces) {
@@ -600,54 +787,232 @@ function shootCannon() {
     }
 }
 
-function controls(){
-    const pauseResumeBtn = document.getElementById('pauseResumeBtn');
-    const pauseResumeOverlay = document.getElementById('pauseResumeOverlay');
-    const overlay = document.getElementById('overlay');
+function performMove(cellId, [i, j]){
+    let cell = Cells[cellId];
 
-    pauseResumeBtn.addEventListener('click', () => {
-        if (!paused) {
-            paused = true;
-            pauseResumeBtn.innerHTML = '<i class="fas fa-play"></i>';
-            overlay.style.display = 'block';
-        } else {
-            paused = false;
-            pauseResumeBtn.innerHTML = '<i class="fas fa-pause"></i>';
-            overlay.style.display = 'none';
+    if (selectedCell.piece.type == 'r' && cell.piece){
+        // Rico trying to switch with a piece
+        let selectedPiece = selectedCell.piece;
+        let cellPiece = cell.piece;
+
+        let temp = Array.from(selectedCell.piece.position)
+        selectedCell.piece.position = [i, j];
+        cell.piece.position = temp;
+
+        //-----------------------------------------------------------------------
+        // Movement process on board
+        let newPos = document.getElementById(`${cell.piece.position[0]}-${cell.piece.position[1]}`);
+        let currentPos = document.getElementById(`${selectedPiece.position[0]}-${selectedPiece.position[1]}`);
+
+        let current = document.getElementById(selectedPiece.id);
+        let neww = document.getElementById(cell.piece.id);
+
+        let currentLeft = current.offsetLeft;
+        let currentTop = current.offsetTop;
+        let newLeft = neww.offsetLeft;
+        let newTop = neww.offsetTop;
+
+        // Making it a free piece by parenting it to board
+        current.parentElement.removeChild(current);
+        document.getElementById('board').appendChild(current);
+        current.classList.remove('piece');
+        current.classList.add('piece-free');
+        
+        current.style.left = currentLeft + 'px';
+        current.style.top = currentTop + 'px';
+        //---
+        neww.parentElement.removeChild(neww);
+        document.getElementById('board').appendChild(neww);
+        neww.classList.remove('piece');
+        neww.classList.add('piece-free');
+
+        neww.style.left = newLeft + 'px';
+        neww.style.top = newTop + 'px';
+        //---
+
+        let count = 10;
+        let distLeft = (newLeft - currentLeft) / count;
+        let distTop = (newTop - currentTop) / count;
+        
+        function animateMovement() {
+            current.style.left = current.offsetLeft + distLeft + 'px';
+            current.style.top = current.offsetTop + distTop + 'px';
+
+            neww.style.left = neww.offsetLeft - distLeft + 'px';
+            neww.style.top = neww.offsetTop - distTop + 'px';
+
+            if (count > 1) {
+                count--;
+                requestAnimationFrame(animateMovement);
+            } else {
+                // Remove the piece and append to new cell
+                neww.remove();
+                current.remove();
+                let elemC = selectedPiece.element();
+                let elemS = cellPiece.element();
+                currentPos.appendChild(elemC);
+                newPos.appendChild(elemS);
+
+                // Spells
+                if (cell.piece.passThrough){
+                    // Pass through
+                    selectedCell = cell;
+                    passThroughSpell();
+                } else if (selectedCell.piece.passThrough) {
+                    passThroughSpell();
+                }
+            }
         }
+        requestAnimationFrame(animateMovement);
 
-        AudioDict.click.play();
-    });
+        //-----------------------------------------------------------------------
 
-    pauseResumeOverlay.addEventListener('click', () => {
-        paused = false;
-        overlay.style.display = 'none';
+        temp = selectedCell.piece
+        selectedCell.piece = cell.piece;
+        cell.piece = temp;
 
-        pauseResumeBtn.innerHTML = '<i class="fas fa-pause"></i>';
+    } else {
+        // Performing move
+        selectedCell.piece.position = [i, j];
+        cell.piece = selectedCell.piece;
 
-        AudioDict.click.play();
-    });
+        //-----------------------------------------------------------------------
+        // Movement process on board
+        let current = document.getElementById(cell.piece.id);
+        let neww = document.getElementById(`${i}-${j}`);
 
-    resetBtn.addEventListener('click', () => {
-        resetBoard();
-        AudioDict.click.play();
-    });
+        let currentLeft = current.offsetLeft;
+        let currentTop = current.offsetTop;
+        let newLeft = neww.offsetLeft;
+        let newTop = neww.offsetTop;
+
+        // Making it a free piece by parenting it to board
+        current.parentElement.removeChild(current);
+        document.getElementById('board').appendChild(current);
+        current.classList.remove('piece');
+        current.classList.add('piece-free');
+        
+        current.style.left = currentLeft + 'px';
+        current.style.top = currentTop + 'px';
+
+        // Animating
+        let count = 10;
+        let distLeft = (newLeft - currentLeft) / count;
+        let distTop = (newTop - currentTop) / count;
+        function animateMovement() {
+            current.style.left = current.offsetLeft + distLeft + 'px';
+            current.style.top = current.offsetTop + distTop + 'px';
+
+            if (count > 1) {
+                count--;
+                requestAnimationFrame(animateMovement);
+            } else {
+                // Remove the piece and append to new cell
+                current.remove();
+                if (cell.piece){
+                    let elem = cell.piece.element();
+                    neww.appendChild(elem);
+                }
+
+                // Spells
+                if (cell.piece.passThrough){
+                    // Pass through
+                    selectedCell = cell;
+                    passThroughSpell();
+                }
+            }
+        }
+        requestAnimationFrame(animateMovement);
+        //-----------------------------------------------------------------------
+        
+        selectedCell.piece = null;
+    }
+
 }
 
-function switchTurns(){
+function performRotation(direction, replay = false) {
+    // Direction = 1 for left, 3 for right
+    let rotationVec;
+    if (direction == 'l') rotationVec = 1;
+    if (direction == 'r') rotationVec = 3;
+
+    if (selectedCell && selectedCell.piece){
+        // History
+        if (!replay) {
+            let historyEntry = {
+                team: selectedCell.piece.team,
+                type: selectedCell.piece.type,
+                direction: direction,
+                selected: selectedCell.id,
+                orientation: {
+                    old: selectedCell.piece.orientation,
+                    new: (selectedCell.piece.orientation + rotationVec) % 4
+                },
+            }
+            updateHistory(historyEntry);
+        }
+        
+
+        // Board changes
+        let initialRotation = selectedCell.piece.orientation * 90;
+        selectedCell.piece.orientation = (selectedCell.piece.orientation + rotationVec) % 4;
+        let finalRotation = direction == 'l' ? (initialRotation + 90) : (initialRotation - 90);
+
+        let step = 6;
+        let dist = (finalRotation - initialRotation) / step;
+        function animateRotation(){
+            initialRotation += dist;
+            document.getElementById(selectedCell.piece.id).style.transform = `rotate(${initialRotation}deg)`;
+
+            if(step > 1) {
+                step--;
+                requestAnimationFrame(animateRotation);
+            }
+        }
+        requestAnimationFrame(animateRotation);
+
+        
+        if (!replay) {
+            for (let cellId in prevLegalMoves){
+                // Removes prev green squares
+                document.getElementById(prevLegalMoves[cellId]).className = 'cell';
+            }
+            prevLegalMoves = []
+            switchTurns()
+        }
+
+        AudioDict.rotate.play();
+    }
+}
+
+// -------------------------------------------------------------------------------
+// Core
+
+function switchTurns(undo = false) {
     // Switches turns to the other team
-    shootCannon();
+    if (!undo) {
+        shootCannon();
+    }
 
     if (Turn == 'b'){
         Turn = 'r';
+        if (BotMode){
+            botHandler(true);
+        }
         startRedTimer();
     } else if (Turn == 'r'){
         Turn = 'b';
         startBlueTimer();
     }
 
-    lButton.disabled = true;
-    rButton.disabled = true;
+    document.getElementById('bottombar-l').disabled = true;
+    document.getElementById('bottombar-r').disabled = true;
+
+    if (tempHistoryList.length > HistoryList.length) {
+        document.getElementById('redo').disabled = false;
+    } else {
+        document.getElementById('redo').disabled = true;
+    }
 }
 
 function generateGrid() {
@@ -664,6 +1029,10 @@ function generateGrid() {
                 // The cell is clicked
                 let legalMoves = cell.getLegal();
 
+                // Disable all spells any functions
+                document.getElementById('spell-b-1').disabled = true;
+                if(document.getElementById('spell-r-1')) document.getElementById('spell-r-1').disabled = true;
+
                 if (prevLegalMoves.includes(cell.id)){
                     // Perform a move since the legal cell is clicked
 
@@ -671,6 +1040,8 @@ function generateGrid() {
                     let historyEntry = {
                         team: selectedCell.piece.team,
                         type: selectedCell.piece.type,
+                        selected: selectedCell.id,
+                        current: cell.id,
                         position: {
                             old: selectedCell.piece.position,
                             new: [i, j]
@@ -678,40 +1049,7 @@ function generateGrid() {
                     }
                     updateHistory(historyEntry);
 
-                    if (selectedCell.piece.type == 'r' && cell.piece){
-                        // Rico trying to switch with a piece
-                        let selectedPiece = selectedCell.piece;
-
-                        let temp = Array.from(selectedCell.piece.position)
-                        selectedCell.piece.position = [i, j];
-                        cell.piece.position = temp;
-
-                        //---
-                        // Movement process on board
-                        document.getElementById(cell.piece.id).remove();
-                        document.getElementById(selectedCell.piece.id).remove();
-                        let elemC = cell.piece.element();
-                        let elemS = selectedPiece.element();
-                        document.getElementById(`${cell.piece.position[0]}-${cell.piece.position[1]}`).appendChild(elemC);
-                        document.getElementById(`${selectedPiece.position[0]}-${selectedPiece.position[1]}`).appendChild(elemS);
-                        //--- 
-
-                        temp = selectedCell.piece
-                        selectedCell.piece = cell.piece;
-                        cell.piece = temp;
-
-                    } else {
-                        // Performing move
-                        selectedCell.piece.position = [i, j];
-                        cell.piece = selectedCell.piece;
-    
-                        // Movement process on board (might later add animation)
-                        document.getElementById(cell.piece.id).remove();
-                        let elem = cell.piece.element();
-                        document.getElementById(`${i}-${j}`).appendChild(elem);
-                        
-                        selectedCell.piece = null;
-                    }
+                    performMove(cell.id, [i, j]);
 
                     AudioDict.move.play();
                     switchTurns();
@@ -725,14 +1063,15 @@ function generateGrid() {
 
                 } else {
                     selectedCell = cell;
+                    if (BotMode && Turn=='r') return;
 
                     // Makes valid Cells green
                     for (let cellId in prevLegalMoves){
                         // Removes prev green squares and disables buttons
                         document.getElementById(prevLegalMoves[cellId]).className = 'cell';
 
-                        lButton.disabled = true;
-                        rButton.disabled = true; 
+                        document.getElementById('bottombar-l').disabled = true;
+                        document.getElementById('bottombar-r').disabled = true; 
                     }
                     prevLegalMoves = []
                     
@@ -746,9 +1085,12 @@ function generateGrid() {
 
                     if (cell.piece && canRotate[cell.piece.type]){
                         // Enable L/R buttons
-                        lButton.disabled = false;
-                        rButton.disabled = false;                        
+                        document.getElementById('bottombar-l').disabled = false;
+                        document.getElementById('bottombar-r').disabled = false;                        
                     }
+
+                    // Enable spells
+                    document.getElementById(`spell-${Turn}-1`).disabled = false;
 
                     if (legalMoves.length == 0) selectedCell = null;
                 }
@@ -789,7 +1131,7 @@ function resetBoard(){
             if (Cells[i + '-' + j].piece){
                 let id = Cells[i + '-' + j].piece.id;
 
-                Pieces[id] = null;
+                delete Pieces[id];
                 document.getElementById(id).remove();
                 Cells[i + '-' + j].piece = null;
             }
@@ -800,7 +1142,6 @@ function resetBoard(){
 
     // Reset values
     const pauseResumeBtn = document.getElementById('pauseResumeBtn');
-    const pauseResumeOverlay = document.getElementById('pauseResumeOverlay');
     const overlay = document.getElementById('overlay');
 
     paused = false;
@@ -811,14 +1152,7 @@ function resetBoard(){
     overlay.style.display = 'none';
 
     // Create resume button in ovelay
-    if (!document.getElementById('pauseResumeOverlay')){
-        const resumeBtn = document.createElement('button');
-        resumeBtn.id ='pauseResumeOverlay';
-        resumeBtn.className = 'icon';
-        resumeBtn.title = 'Resume';
-        resumeBtn.innerHTML = '<i class="fas fa-play"></i>';
-        document.getElementById('overlay-content').insertBefore(resumeBtn, document.getElementById('resetBtn'));
-    }
+    pauseResumeOverlay.innerHTML = '<i class="fas fa-play"></i>';
     document.getElementById('overlay-text').innerHTML = 'Game paused';
 
     // Reset the timer
@@ -842,16 +1176,207 @@ function resetBoard(){
     
 }
 
+function randomizeInitPosition(){
+    // Randomize initial position of pieces using some logic
+    // 1. Titans (1)
+    // 2. Cannons (1) (base rank)
+    // 3. Rico (1 or 2)
+    // 4. Tanks (1 or 2)
+    // 5. Semi rico (2 or 3 or 4)
+    //      2 if 3(Ricos + Tanks)
+    //      3 if 2(Ricos + Tanks)
+    //      4 if 1(Ricos + Tanks)
+
+    let priority = ['t', 'c', 'r', 'b', 's']
+    Turn = 'b';
+    let info = {
+        br: 0,
+        bb: 0,
+        rr: 0,
+        rb: 0,
+    }
+
+    let emptyBoard = [
+        // <piece><orientation>
+        // rico: 0,1 ; semirico: 0,1,2,3 ; cannon: 0,1,2,3
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+    ]
+
+
+    function toggleTurns() {
+        if (Turn == 'b'){
+            Turn = 'r';
+        } else {
+            Turn = 'b';
+        }
+    }
+
+    function r(min, max){
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function piecer(piece){
+        let i,j;
+
+        if (piece == 't') {
+            // Tank
+            while(true){
+                i = r(0, 7);
+                j = r(0, 7);
+
+                if (!emptyBoard[i][j]){
+                    emptyBoard[i][j] = Turn + 't'
+                    break;
+                }
+            }
+        } else if (piece == 'c') {
+            // Cannon
+            while(true){
+                i = Turn == 'b' ? 7 : 0;
+                j = r(0, 7);
+
+                if (!emptyBoard[i][j]){
+                    emptyBoard[i][j] = Turn + 'c' + (Turn == 'b' ? '0' : '2')
+                    break;
+                }
+            }
+        } else if (piece == 'r' || piece == 'b') {
+            // Rico
+            for (let a = 0; a < r(1, 2); a++){
+                info[Turn + piece]++;
+                while(true){
+                    i = r(0, 7);
+                    j = r(0, 7);
+
+                    if (!emptyBoard[i][j]){
+                        emptyBoard[i][j] = Turn + piece + String(r(0, 3))
+                        break;
+                    }
+                }
+            }
+        } else if (piece == 's') {
+            // Semi rico
+            let semiCount = 5 - (info[Turn + 'r'] + info[Turn + 'b'])
+            for (let a = 0; a < semiCount; a++) {
+                while(true){
+                    i = r(0, 7);
+                    j = r(0, 7);
+
+                    if (!emptyBoard[i][j]){
+                        emptyBoard[i][j] = Turn + 's' + String(r(0, 1))
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    for (item in priority) {
+        piecer(priority[item])
+        toggleTurns()
+        piecer(priority[item])
+        toggleTurns()
+    }
+
+    return emptyBoard;
+}
+
+//----------------------------------------------------------------
+// Bot
+
+function botHandler(move = false){
+    // Functions
+    function moveRandom(){
+        // Basic bot
+        let statePieces = {};
+        for (let piece in Pieces){
+            if(Pieces[piece].team == 'r'){
+                statePieces[Pieces[piece].id] = Pieces[piece];
+            }
+        }
+        let randomPieceKey = Math.floor(Math.random() * (Object.keys(statePieces).length));
+        let randomPiece = statePieces[Object.keys(statePieces)[randomPieceKey]];
+
+        let currentCell = Cells[randomPiece.position[0] + '-' + randomPiece.position[1]];
+        let legalMoves = currentCell.getLegal();
+        let randomMoveKey = Math.floor(Math.random() * (Object.keys(legalMoves).length));
+
+        // Movement
+        selectedCell = currentCell;
+
+        // General movement stuff
+        // Entering history
+        let historyEntry = {
+            team: selectedCell.piece.team,
+            type: selectedCell.piece.type,
+            selected: selectedCell.id,
+            current: legalMoves[randomMoveKey],
+            position: {
+                old: selectedCell.piece.position,
+                new: Cells[legalMoves[randomMoveKey]].position
+            },
+        }
+        updateHistory(historyEntry);
+
+        performMove(
+            legalMoves[randomMoveKey],
+            Cells[legalMoves[randomMoveKey]].position,
+        );
+
+        AudioDict.move.play();
+        switchTurns();
+    }
+
+    // move
+    if (move){
+        setTimeout(function(){
+            moveRandom();
+        }, 1000);
+    }
+}
+
 //----------------------------------------------------------------
 // Runs after loading
+
 document.addEventListener('DOMContentLoaded', function(){
     generateGrid();
     initializePosition();
 
     // Initialize button display
+    controls();
+    // spells();
     updateButtonDisplay(blueButton, blueTime);
     updateButtonDisplay(redButton, redTime); 
-    controls();
+
+    // Home screen
+    const historyTitleB = document.getElementById('history-title-b');
+    const historyTitleR = document.getElementById('history-title-r');
+
+    document.getElementById('player').addEventListener('click', () => {
+        document.getElementById('homeScreen').remove();
+
+        historyTitleB.innerHTML = 'Player 1';
+        historyTitleR.innerHTML = 'Player 2';
+    })
+
+    document.getElementById('bot').addEventListener('click', () => {
+        // Remove things for bot mode
+        document.getElementById('homeScreen').remove();
+        document.getElementById('spell-r-1').remove();
+
+        BotMode = true;
+        botHandler()
+
+        historyTitleB.innerHTML = 'Player';
+        historyTitleR.innerHTML = 'Bot';
+    });
 });
 
 //----------------------------------------------------------------

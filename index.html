@@ -8,17 +8,37 @@
     <link rel="stylesheet" type="text/css" href="css/stylesheet.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
-<body>
-    
+<body style="overflow: ''">
+    <div id="homeScreen" class="homeScreen">
+        <div class="homeScreenButtons">
+            <button id="player" title="Player">Player v Player</button>
+            <button id="bot" title="Bot">Player v Bot</button>
+        </div>
+    </div>
+
     <div id = 'container' class="container">
-        <div class="column column-left"></div>
+        <div class="column column-left">
+            <!-- Left column (spells) -->
+            <div class="spells-container">
+                <div class="spells-b">
+                    <button disabled id="spell-b-1" class="spell" title="Pass through spell">Pass through</button>
+                    <!-- <button id="spell-b-2" class="spell">a</button> -->
+                </div>
+                <div class="spells-r">
+                    <button disabled id="spell-r-1" class="spell" title="Pass through spell">Pass through</button>
+                    <!-- <button id="spell-r-2" class="spell">a</button> -->
+                </div>
+            </div>
+        </div>
 
         <div class="column column-middle">
             <!-- Middle column (main) -->
             <div class="topbar">
                 <div class="topbar-controls">
                     <button id="pauseResumeBtn" class="icon" title="Pause"><i class="fas fa-pause"></i></button>
-                    <!-- <button id="resetBtn" class="icon" title="Reset" disabled><i class="fas fa-sync-alt"></i></button> -->
+
+                    <button disabled id="undo" class="icon">Undo <i class="fas fa-undo"></i></button>
+                    <button disabled id="redo" class="icon">Redo <i class="fas fa-redo"></i></button>
                 </div>
                 <div class="topbar-timer">
                     <button id="blueButton" class="blue-timer">00:00</button>
@@ -34,6 +54,9 @@
                             <p id="overlay-text">Game paused</p>
                             <button id="pauseResumeOverlay" class="icon" title="Resume"><i class="fas fa-play"></i></button>
                             <button id="resetBtn" class="icon" title="Reset"><i class="fas fa-sync-alt"></i></button>
+                            <button id="shuffleBtn" class="icon" title="Randomize"><i class="fas fa-random"></i></button>
+                            <br> <br>
+                            <button id="replayBtn" class="icon" title="Replay">Replay <i class="fas fa-retweet"></i></button>
                         </div>
                     </div>
                 </div>
@@ -47,9 +70,15 @@
 
         <div class="column column-right">
             <!-- Right column (History) -->
-            <div id="history" class="history-container">
-                <div id="history-b" class="history-b"></div>
-                <div id="history-r" class="history-r"></div>
+            <div class="history-container-container">
+                <div class="history-title">
+                    <div id="history-title-b">Player 1</div>
+                    <div id="history-title-r">Player 2</div>
+                </div>
+                <div id="history" class="history-container">
+                    <div id="history-b" class="history-b"></div>
+                    <div id="history-r" class="history-r"></div>
+                </div>
             </div>
         </div>
     </div>
